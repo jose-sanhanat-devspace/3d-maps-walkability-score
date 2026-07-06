@@ -61,7 +61,7 @@ function Map3D() {
   const mapRef = useRef<maplibregl.Map | null>(null)
   const overlayRef = useRef<MapboxOverlay | null>(null)
 
-  const [shapes, setShapes] = useState<WalkabilityShape[]>(() => generateMockWalkabilityData(CITY_CENTER))
+  const [shapes, setShapes] = useState<WalkabilityShape[]>([])
   const [mode, setMode] = useState<EditMode>('add')
   const [score, setScore] = useState(3)
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
