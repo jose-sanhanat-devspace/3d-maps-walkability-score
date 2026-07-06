@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
-import { ColumnLayer } from '@deck.gl/layers'
+import { PathLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { PickingInfo } from '@deck.gl/core'
-import { generateMockWalkabilityData, makePointId, type WalkabilityPoint } from './walkabilityData'
+import { generateMockWalkabilityData, makeLineId, type WalkabilityLine } from './walkabilityData'
 import ControlPanel, { type EditMode } from './ControlPanel'
 import StarRating from './StarRating'
 
@@ -12,7 +12,7 @@ const CITY_CENTER: [number, number] = [100.5231, 13.7367] // Chulalongkorn Unive
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 
-const ELEVATION_SCALE = 20 // meters per star, so 5 stars ~= a mid-rise building
+const DRAFT_COLOR: [number, number, number, number] = [30, 144, 255, 220]
 
 function scoreToColor(score: number): [number, number, number, number] {
   // 1 star -> pale yellow, 5 stars -> deep red
@@ -20,7 +20,7 @@ function scoreToColor(score: number): [number, number, number, number] {
   const r = 255
   const g = Math.round(245 - t * 165)
   const b = Math.round(235 - t * 200)
-  return [r, g, b, 200]
+  return [r, g, b, 220]
 }
 
 interface HoverInfo {
@@ -58,10 +58,11 @@ function Map3D() {
   const mapRef = useRef<maplibregl.Map | null>(null)
   const overlayRef = useRef<MapboxOverlay | null>(null)
 
-  const [points, setPoints] = useState<WalkabilityPoint[]>([])
+  const [lines, setLines] = useState<WalkabilityLine[]>([])
   const [mode, setMode] = useState<EditMode>('add')
   const [score, setScore] = useState(3)
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
+  const [drawingPath, setDrawingPath] = useState<[number, number][] | null>(null)
 
   const modeRef = useRef(mode)
   useEffect(() => {
@@ -69,12 +70,22 @@ function Map3D() {
     if (mapRef.current) {
       mapRef.current.getCanvas().style.cursor = mode === 'add' ? 'crosshair' : 'pointer'
     }
+    if (mode !== 'add') setDrawingPath(null)
   }, [mode])
 
   const scoreRef = useRef(score)
   useEffect(() => {
     scoreRef.current = score
   }, [score])
+
+  const finishLine = () => {
+    if (drawingPath && drawingPath.length >= 2) {
+      setLines((prev) => [...prev, { id: makeLineId(), path: drawingPath, score: scoreRef.current }])
+    }
+    setDrawingPath(null)
+  }
+
+  const cancelLine = () => setDrawingPath(null)
 
   // Initialize the map once.
   useEffect(() => {
@@ -98,8 +109,8 @@ function Map3D() {
 
     map.on('click', (e) => {
       if (modeRef.current !== 'add') return
-      const { lng, lat } = e.lngLat
-      setPoints((prev) => [...prev, { id: makePointId(), position: [lng, lat], score: scoreRef.current }])
+      const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
+      setDrawingPath((prev) => (prev ? [...prev, point] : [point]))
     })
 
     return () => {
@@ -109,47 +120,62 @@ function Map3D() {
     }
   }, [])
 
-  // Keep the deck.gl layer in sync with the current points/mode.
+  // Keep the deck.gl layers in sync with the current lines/mode/draft.
   useEffect(() => {
     if (!overlayRef.current) return
 
     overlayRef.current.setProps({
       layers: [
-        new ColumnLayer<WalkabilityPoint>({
-          id: 'walkability-columns',
-          data: points,
-          diskResolution: 6,
-          radius: 25,
-          extruded: true,
+        new PathLayer<WalkabilityLine>({
+          id: 'walkability-lines',
+          data: lines,
           pickable: true,
           autoHighlight: true,
-          highlightColor: [255, 255, 255, 90],
-          elevationScale: ELEVATION_SCALE,
-          getPosition: (d) => d.position,
-          getElevation: (d) => d.score,
-          getFillColor: (d) => scoreToColor(d.score),
-          onClick: (info: PickingInfo<WalkabilityPoint>) => {
+          highlightColor: [255, 255, 255, 120],
+          widthUnits: 'pixels',
+          widthMinPixels: 3,
+          getPath: (d) => d.path,
+          getWidth: (d) => 2 + d.score * 2,
+          getColor: (d) => scoreToColor(d.score),
+          onClick: (info: PickingInfo<WalkabilityLine>) => {
             if (modeRef.current !== 'remove' || !info.object) return
             const target = info.object
-            setPoints((prev) => prev.filter((p) => p.id !== target.id))
+            setLines((prev) => prev.filter((l) => l.id !== target.id))
           },
-          onHover: (info: PickingInfo<WalkabilityPoint>) => {
+          onHover: (info: PickingInfo<WalkabilityLine>) => {
             setHoverInfo(info.object ? { x: info.x, y: info.y, score: info.object.score } : null)
           },
           updateTriggers: {
-            getFillColor: mode,
+            getColor: mode,
           },
+        }),
+        new PathLayer<{ path: [number, number][] }>({
+          id: 'draft-line',
+          data: drawingPath && drawingPath.length > 1 ? [{ path: drawingPath }] : [],
+          widthUnits: 'pixels',
+          widthMinPixels: 3,
+          getPath: (d) => d.path,
+          getWidth: 4,
+          getColor: DRAFT_COLOR,
+        }),
+        new ScatterplotLayer<[number, number]>({
+          id: 'draft-vertices',
+          data: drawingPath ?? [],
+          getPosition: (d) => d,
+          radiusUnits: 'pixels',
+          getRadius: 5,
+          getFillColor: DRAFT_COLOR,
         }),
       ],
     })
-  }, [points, mode])
+  }, [lines, mode, drawingPath])
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <div className="legend">
         <h1>Walkability Score</h1>
-        <p>3D columns — taller & darker red = more walkable</p>
+        <p>Lines — thicker & darker red = more walkable</p>
       </div>
       {hoverInfo && (
         <div className="tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
@@ -161,8 +187,11 @@ function Map3D() {
         onModeChange={setMode}
         score={score}
         onScoreChange={setScore}
-        pointCount={points.length}
-        onReset={() => setPoints(generateMockWalkabilityData(CITY_CENTER, 400, 0.015))}
+        lineCount={lines.length}
+        onReset={() => setLines(generateMockWalkabilityData(CITY_CENTER))}
+        drawingPointCount={drawingPath?.length ?? 0}
+        onFinishLine={finishLine}
+        onCancelLine={cancelLine}
       />
     </div>
   )

@@ -111,6 +111,32 @@
   color: #666;
 }
 
+.draw-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.draw-actions button {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #2b7de9;
+  color: #fff;
+  cursor: pointer;
+}
+
+.draw-actions button:last-child {
+  background: #fff;
+  color: #333;
+}
+
+.draw-actions button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 .panel-footer {
   display: flex;
   align-items: center;
