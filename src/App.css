@@ -22,6 +22,10 @@
   color: #444;
 }
 
+.legend .app-mode-toggle {
+  margin-top: 10px;
+}
+
 .control-panel {
   position: absolute;
   top: 16px;

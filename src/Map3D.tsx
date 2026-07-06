@@ -32,6 +32,8 @@ interface HoverInfo {
   score: number
 }
 
+type AppMode = 'editor' | 'viewer'
+
 // Real building footprints + heights from OSM, served free by OpenFreeMap.
 function addBuildingLayer(map: maplibregl.Map) {
   map.addSource('building-tiles', {
@@ -63,18 +65,22 @@ function Map3D() {
 
   const [shapes, setShapes] = useState<WalkabilityShape[]>([])
   const [mode, setMode] = useState<EditMode>('add')
+  const [appMode, setAppMode] = useState<AppMode>('editor')
   const [score, setScore] = useState(3)
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
   const [drawingPath, setDrawingPath] = useState<[number, number][] | null>(null)
 
   const modeRef = useRef(mode)
+  const appModeRef = useRef(appMode)
   useEffect(() => {
     modeRef.current = mode
+    appModeRef.current = appMode
     if (mapRef.current) {
-      mapRef.current.getCanvas().style.cursor = mode === 'add' ? 'crosshair' : 'pointer'
+      mapRef.current.getCanvas().style.cursor =
+        appMode === 'editor' ? (mode === 'add' ? 'crosshair' : 'pointer') : ''
     }
-    if (mode !== 'add') setDrawingPath(null)
-  }, [mode])
+    if (appMode !== 'editor' || mode !== 'add') setDrawingPath(null)
+  }, [mode, appMode])
 
   const scoreRef = useRef(score)
   useEffect(() => {
@@ -116,7 +122,7 @@ function Map3D() {
     map.addControl(overlay as unknown as maplibregl.IControl)
 
     map.on('click', (e) => {
-      if (modeRef.current !== 'add') return
+      if (appModeRef.current !== 'editor' || modeRef.current !== 'add') return
       const prev = drawingPathRef.current
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
 
@@ -149,7 +155,7 @@ function Map3D() {
     const canClose = (drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS
 
     const handleRemoveClick = (info: PickingInfo<WalkabilityShape>) => {
-      if (modeRef.current !== 'remove' || !info.object) return
+      if (appModeRef.current !== 'editor' || modeRef.current !== 'remove' || !info.object) return
       const target = info.object
       setShapes((prev) => prev.filter((s) => s.id !== target.id))
     }
@@ -228,24 +234,42 @@ function Map3D() {
       <div className="legend">
         <h1>Walkability Score</h1>
         <p>Lines & areas — darker red = more walkable</p>
+        <div className="mode-toggle app-mode-toggle">
+          <button
+            type="button"
+            className={appMode === 'editor' ? 'active' : ''}
+            onClick={() => setAppMode('editor')}
+          >
+            Editor
+          </button>
+          <button
+            type="button"
+            className={appMode === 'viewer' ? 'active' : ''}
+            onClick={() => setAppMode('viewer')}
+          >
+            Viewer
+          </button>
+        </div>
       </div>
       {hoverInfo && (
         <div className="tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
           <StarRating value={hoverInfo.score} size={16} />
         </div>
       )}
-      <ControlPanel
-        mode={mode}
-        onModeChange={setMode}
-        score={score}
-        onScoreChange={setScore}
-        lineCount={shapes.length}
-        onReset={() => setShapes(generateMockWalkabilityData(CITY_CENTER))}
-        drawingPointCount={drawingPath?.length ?? 0}
-        canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}
-        onFinishLine={finishLine}
-        onCancelLine={cancelLine}
-      />
+      {appMode === 'editor' && (
+        <ControlPanel
+          mode={mode}
+          onModeChange={setMode}
+          score={score}
+          onScoreChange={setScore}
+          lineCount={shapes.length}
+          onReset={() => setShapes(generateMockWalkabilityData(CITY_CENTER))}
+          drawingPointCount={drawingPath?.length ?? 0}
+          canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}
+          onFinishLine={finishLine}
+          onCancelLine={cancelLine}
+        />
+      )}
     </div>
   )
 }
