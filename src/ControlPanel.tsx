@@ -10,6 +10,7 @@ interface ControlPanelProps {
   lineCount: number
   onReset: () => void
   drawingPointCount: number
+  canClose: boolean
   onFinishLine: () => void
   onCancelLine: () => void
 }
@@ -22,6 +23,7 @@ function ControlPanel({
   lineCount,
   onReset,
   drawingPointCount,
+  canClose,
   onFinishLine,
   onCancelLine,
 }: ControlPanelProps) {
@@ -55,7 +57,8 @@ function ControlPanel({
           {isDrawing ? (
             <>
               <span className="hint">
-                Drawing line — {drawingPointCount} point{drawingPointCount === 1 ? '' : 's'}
+                Drawing — {drawingPointCount} point{drawingPointCount === 1 ? '' : 's'}
+                {canClose ? '. Click the green point to close the area.' : ''}
               </span>
               <div className="draw-actions">
                 <button type="button" onClick={onFinishLine} disabled={drawingPointCount < 2}>
@@ -67,15 +70,15 @@ function ControlPanel({
               </div>
             </>
           ) : (
-            <span className="hint">Click the map to start drawing a line</span>
+            <span className="hint">Click the map to start drawing a line or area</span>
           )}
         </div>
       ) : (
-        <span className="hint">Click a line on the map to remove it</span>
+        <span className="hint">Click a line or area on the map to remove it</span>
       )}
 
       <div className="panel-footer">
-        <span>{lineCount} lines</span>
+        <span>{lineCount} shapes</span>
         <button type="button" className="reset" onClick={onReset}>
           Reset to mock data
         </button>

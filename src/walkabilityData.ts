@@ -1,13 +1,14 @@
-export interface WalkabilityLine {
+export interface WalkabilityShape {
   id: string
-  path: [number, number][] // vertices, at least 2
+  path: [number, number][] // vertices; if closed, this is the polygon ring (not repeating the first point)
   score: number // 1-5 stars
+  closed: boolean // false = line segment, true = filled area
 }
 
 let nextId = 0
-export function makeLineId(): string {
+export function makeShapeId(): string {
   nextId += 1
-  return `line-${Date.now()}-${nextId}`
+  return `shape-${Date.now()}-${nextId}`
 }
 
 // Mock walkability scores around a city center, modeled as short street-like segments.
@@ -16,8 +17,8 @@ export function generateMockWalkabilityData(
   center: [number, number],
   count = 150,
   spread = 0.015,
-): WalkabilityLine[] {
-  const lines: WalkabilityLine[] = []
+): WalkabilityShape[] {
+  const shapes: WalkabilityShape[] = []
   for (let i = 0; i < count; i++) {
     const lng = center[0] + (Math.random() - 0.5) * spread
     const lat = center[1] + (Math.random() - 0.5) * spread
@@ -31,14 +32,15 @@ export function generateMockWalkabilityData(
     const raw = Math.max(0, Math.min(1, (90 - distance * 70 + (Math.random() - 0.5) * 30) / 100))
     const score = Math.max(1, Math.min(5, Math.round(1 + raw * 4)))
 
-    lines.push({
-      id: makeLineId(),
+    shapes.push({
+      id: makeShapeId(),
       path: [
         [lng, lat],
         [lng2, lat2],
       ],
       score,
+      closed: false,
     })
   }
-  return lines
+  return shapes
 }
