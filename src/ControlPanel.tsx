@@ -87,7 +87,7 @@ function ControlPanel({
 
           {mode === 'add' ? (
             <div className="score-picker">
-              <span>Score</span>
+              <span className="field-label">Score</span>
               <StarRating value={score} onChange={onScoreChange} size={22} />
               {isDrawing ? (
                 <>
