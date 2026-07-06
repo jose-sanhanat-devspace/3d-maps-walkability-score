@@ -3,10 +3,14 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { PathLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import type { PickingInfo } from '@deck.gl/core'
 import { generateMockWalkabilityData, makeShapeId, type WalkabilityShape } from './walkabilityData'
 import { createShape, deleteShape, fetchShapes, resetShapes } from './shapesApi'
-import ControlPanel, { type EditMode } from './ControlPanel'
+import { makeManholeId, type ManholeCover } from './manholeData'
+import { createManhole, deleteManhole, fetchManholes, uploadManholeImage } from './manholeApi'
+import { pinHeadMesh, pinHeadTranslation, pinStemMesh, PIN_STEM_TRANSLATION } from './pinMesh'
+import ControlPanel, { type AssetTab, type EditMode } from './ControlPanel'
 import StarRating from './StarRating'
 
 const POLL_INTERVAL_MS = 8000
@@ -19,6 +23,7 @@ const DRAFT_COLOR: [number, number, number, number] = [30, 144, 255, 220]
 const CLOSE_COLOR: [number, number, number, number] = [46, 204, 113, 255]
 const CLOSE_THRESHOLD_PX = 14
 const MIN_CLOSE_POINTS = 3
+const MANHOLE_COLOR: [number, number, number, number] = [184, 134, 11, 255]
 
 function scoreToColor(score: number, alpha = 220): [number, number, number, number] {
   // 1 star -> pale yellow, 5 stars -> deep red
@@ -33,6 +38,13 @@ interface HoverInfo {
   x: number
   y: number
   score: number
+}
+
+interface ManholeHoverInfo {
+  x: number
+  y: number
+  imageUrl: string | null
+  touristSpot: string
 }
 
 type AppMode = 'editor' | 'viewer'
@@ -70,21 +82,39 @@ function Map3D() {
   const [loaded, setLoaded] = useState(false)
   const [mode, setMode] = useState<EditMode>('add')
   const [appMode, setAppMode] = useState<AppMode>('editor')
+  const [assetTab, setAssetTab] = useState<AssetTab>('walkability')
   const [score, setScore] = useState(3)
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
   const [drawingPath, setDrawingPath] = useState<[number, number][] | null>(null)
 
+  const [manholes, setManholes] = useState<ManholeCover[]>([])
+  const [manholeMode, setManholeMode] = useState<EditMode>('add')
+  const [pendingManholePos, setPendingManholePos] = useState<[number, number] | null>(null)
+  const [manholeSaving, setManholeSaving] = useState(false)
+  const [manholeHoverInfo, setManholeHoverInfo] = useState<ManholeHoverInfo | null>(null)
+
   const modeRef = useRef(mode)
   const appModeRef = useRef(appMode)
+  const assetTabRef = useRef(assetTab)
+  const manholeModeRef = useRef(manholeMode)
   useEffect(() => {
     modeRef.current = mode
     appModeRef.current = appMode
+    assetTabRef.current = assetTab
+    manholeModeRef.current = manholeMode
+
     if (mapRef.current) {
-      mapRef.current.getCanvas().style.cursor =
-        appMode === 'editor' ? (mode === 'add' ? 'crosshair' : 'pointer') : ''
+      let cursor = ''
+      if (appMode === 'editor') {
+        const activeMode = assetTab === 'walkability' ? mode : manholeMode
+        cursor = activeMode === 'add' ? 'crosshair' : 'pointer'
+      }
+      mapRef.current.getCanvas().style.cursor = cursor
     }
-    if (appMode !== 'editor' || mode !== 'add') setDrawingPath(null)
-  }, [mode, appMode])
+
+    if (appMode !== 'editor' || assetTab !== 'walkability' || mode !== 'add') setDrawingPath(null)
+    if (appMode !== 'editor' || assetTab !== 'manhole' || manholeMode !== 'add') setPendingManholePos(null)
+  }, [mode, appMode, assetTab, manholeMode])
 
   const scoreRef = useRef(score)
   useEffect(() => {
@@ -99,6 +129,7 @@ function Map3D() {
   // Bumped on every local mutation so a slow/stale fetch (initial load or a
   // poll tick) can't overwrite a newer local change when it resolves late.
   const mutationEpochRef = useRef(0)
+  const manholeEpochRef = useRef(0)
 
   const loadShapes = (markLoaded = false) => {
     const requestEpoch = mutationEpochRef.current
@@ -110,6 +141,15 @@ function Map3D() {
       .finally(() => {
         if (markLoaded) setLoaded(true)
       })
+  }
+
+  const loadManholes = () => {
+    const requestEpoch = manholeEpochRef.current
+    fetchManholes()
+      .then((data) => {
+        if (manholeEpochRef.current === requestEpoch) setManholes(data)
+      })
+      .catch((err) => console.error('Failed to load manholes', err))
   }
 
   const finishLine = () => {
@@ -124,10 +164,39 @@ function Map3D() {
 
   const cancelLine = () => setDrawingPath(null)
 
-  // Load shared shapes on mount, then poll so other editors' changes show up.
+  const saveManhole = async ({ file, touristSpot }: { file: File | null; touristSpot: string }) => {
+    if (!pendingManholePos) return
+    setManholeSaving(true)
+    try {
+      const imageUrl = file ? await uploadManholeImage(file) : null
+      const manhole: ManholeCover = {
+        id: makeManholeId(),
+        lng: pendingManholePos[0],
+        lat: pendingManholePos[1],
+        imageUrl,
+        touristSpot,
+      }
+      manholeEpochRef.current += 1
+      setManholes((prev) => [...prev, manhole])
+      await createManhole(manhole)
+    } catch (err) {
+      console.error('Failed to save manhole', err)
+    } finally {
+      setManholeSaving(false)
+      setPendingManholePos(null)
+    }
+  }
+
+  const cancelManhole = () => setPendingManholePos(null)
+
+  // Load shared data on mount, then poll so other editors' changes show up.
   useEffect(() => {
     loadShapes(true)
-    const interval = setInterval(() => loadShapes(false), POLL_INTERVAL_MS)
+    loadManholes()
+    const interval = setInterval(() => {
+      loadShapes(false)
+      loadManholes()
+    }, POLL_INTERVAL_MS)
     return () => clearInterval(interval)
   }, [])
 
@@ -152,9 +221,17 @@ function Map3D() {
     map.addControl(overlay as unknown as maplibregl.IControl)
 
     map.on('click', (e) => {
-      if (appModeRef.current !== 'editor' || modeRef.current !== 'add') return
-      const prev = drawingPathRef.current
+      if (appModeRef.current !== 'editor') return
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
+
+      if (assetTabRef.current === 'manhole') {
+        if (manholeModeRef.current !== 'add') return
+        setPendingManholePos(point)
+        return
+      }
+
+      if (modeRef.current !== 'add') return
+      const prev = drawingPathRef.current
 
       if (prev && prev.length >= MIN_CLOSE_POINTS) {
         const startScreen = map.project(prev[0])
@@ -179,7 +256,7 @@ function Map3D() {
     }
   }, [])
 
-  // Keep the deck.gl layers in sync with the current shapes/mode/draft.
+  // Keep the deck.gl layers in sync with the current shapes/manholes/draft.
   useEffect(() => {
     if (!overlayRef.current) return
 
@@ -188,7 +265,13 @@ function Map3D() {
     const canClose = (drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS
 
     const handleRemoveClick = (info: PickingInfo<WalkabilityShape>) => {
-      if (appModeRef.current !== 'editor' || modeRef.current !== 'remove' || !info.object) return
+      if (
+        appModeRef.current !== 'editor' ||
+        assetTabRef.current !== 'walkability' ||
+        modeRef.current !== 'remove' ||
+        !info.object
+      )
+        return
       const target = info.object
       mutationEpochRef.current += 1
       setShapes((prev) => prev.filter((s) => s.id !== target.id))
@@ -197,6 +280,26 @@ function Map3D() {
 
     const handleHover = (info: PickingInfo<WalkabilityShape>) => {
       setHoverInfo(info.object ? { x: info.x, y: info.y, score: info.object.score } : null)
+    }
+
+    const handleManholeRemoveClick = (info: PickingInfo<ManholeCover>) => {
+      if (
+        appModeRef.current !== 'editor' ||
+        assetTabRef.current !== 'manhole' ||
+        manholeModeRef.current !== 'remove' ||
+        !info.object
+      )
+        return
+      const target = info.object
+      manholeEpochRef.current += 1
+      setManholes((prev) => prev.filter((m) => m.id !== target.id))
+      deleteManhole(target.id).catch((err) => console.error('Failed to delete manhole', err))
+    }
+
+    const handleManholeHover = (info: PickingInfo<ManholeCover>) => {
+      setManholeHoverInfo(
+        info.object ? { x: info.x, y: info.y, imageUrl: info.object.imageUrl, touristSpot: info.object.touristSpot } : null,
+      )
     }
 
     overlayRef.current.setProps({
@@ -259,9 +362,43 @@ function Map3D() {
             getFillColor: canClose,
           },
         }),
+        new SimpleMeshLayer<ManholeCover>({
+          id: 'manhole-stems',
+          data: manholes,
+          mesh: pinStemMesh,
+          getPosition: (d) => [d.lng, d.lat],
+          getTranslation: () => PIN_STEM_TRANSLATION,
+          getColor: MANHOLE_COLOR,
+          pickable: true,
+          autoHighlight: true,
+          highlightColor: [255, 255, 255, 120],
+          onClick: handleManholeRemoveClick,
+          onHover: handleManholeHover,
+        }),
+        new SimpleMeshLayer<ManholeCover>({
+          id: 'manhole-heads',
+          data: manholes,
+          mesh: pinHeadMesh,
+          getPosition: (d) => [d.lng, d.lat],
+          getTranslation: pinHeadTranslation,
+          getColor: MANHOLE_COLOR,
+          pickable: true,
+          autoHighlight: true,
+          highlightColor: [255, 255, 255, 120],
+          onClick: handleManholeRemoveClick,
+          onHover: handleManholeHover,
+        }),
+        new ScatterplotLayer<[number, number]>({
+          id: 'manhole-draft-marker',
+          data: pendingManholePos ? [pendingManholePos] : [],
+          getPosition: (d) => d,
+          radiusUnits: 'pixels',
+          getRadius: 8,
+          getFillColor: DRAFT_COLOR,
+        }),
       ],
     })
-  }, [shapes, mode, drawingPath])
+  }, [shapes, mode, drawingPath, manholes, pendingManholePos])
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
@@ -291,8 +428,16 @@ function Map3D() {
           <StarRating value={hoverInfo.score} size={16} />
         </div>
       )}
+      {manholeHoverInfo && (
+        <div className="tooltip tooltip-manhole" style={{ left: manholeHoverInfo.x, top: manholeHoverInfo.y }}>
+          {manholeHoverInfo.imageUrl && <img src={manholeHoverInfo.imageUrl} alt="" />}
+          <p>{manholeHoverInfo.touristSpot || 'No description yet'}</p>
+        </div>
+      )}
       {appMode === 'editor' && (
         <ControlPanel
+          assetTab={assetTab}
+          onAssetTabChange={setAssetTab}
           mode={mode}
           onModeChange={setMode}
           score={score}
@@ -308,6 +453,13 @@ function Map3D() {
           canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}
           onFinishLine={finishLine}
           onCancelLine={cancelLine}
+          manholeMode={manholeMode}
+          onManholeModeChange={setManholeMode}
+          manholeCount={manholes.length}
+          pendingManhole={pendingManholePos !== null}
+          manholeSaving={manholeSaving}
+          onSaveManhole={saveManhole}
+          onCancelManhole={cancelManhole}
         />
       )}
     </div>
