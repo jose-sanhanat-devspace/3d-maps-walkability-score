@@ -5,7 +5,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { ColumnLayer } from '@deck.gl/layers'
 import { generateMockWalkabilityData, type WalkabilityPoint } from './walkabilityData'
 
-const CITY_CENTER: [number, number] = [-73.9857, 40.7484] // Manhattan, as a default example
+const CITY_CENTER: [number, number] = [100.5231, 13.7367] // Chulalongkorn University, Bangkok, Thailand
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 
