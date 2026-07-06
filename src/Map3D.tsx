@@ -6,18 +6,27 @@ import { ColumnLayer } from '@deck.gl/layers'
 import type { PickingInfo } from '@deck.gl/core'
 import { generateMockWalkabilityData, makePointId, type WalkabilityPoint } from './walkabilityData'
 import ControlPanel, { type EditMode } from './ControlPanel'
+import StarRating from './StarRating'
 
 const CITY_CENTER: [number, number] = [100.5231, 13.7367] // Chulalongkorn University, Bangkok, Thailand
 
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
 
+const ELEVATION_SCALE = 20 // meters per star, so 5 stars ~= a mid-rise building
+
 function scoreToColor(score: number): [number, number, number, number] {
-  // low score -> pale yellow, high score -> deep red
-  const t = Math.max(0, Math.min(1, score / 100))
+  // 1 star -> pale yellow, 5 stars -> deep red
+  const t = Math.max(0, Math.min(1, (score - 1) / 4))
   const r = 255
   const g = Math.round(245 - t * 165)
   const b = Math.round(235 - t * 200)
   return [r, g, b, 200]
+}
+
+interface HoverInfo {
+  x: number
+  y: number
+  score: number
 }
 
 // Real building footprints + heights from OSM, served free by OpenFreeMap.
@@ -51,7 +60,8 @@ function Map3D() {
 
   const [points, setPoints] = useState<WalkabilityPoint[]>([])
   const [mode, setMode] = useState<EditMode>('add')
-  const [score, setScore] = useState(70)
+  const [score, setScore] = useState(3)
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
 
   const modeRef = useRef(mode)
   useEffect(() => {
@@ -112,8 +122,9 @@ function Map3D() {
           radius: 25,
           extruded: true,
           pickable: true,
-          autoHighlight: mode === 'remove',
-          elevationScale: 3,
+          autoHighlight: true,
+          highlightColor: [255, 255, 255, 90],
+          elevationScale: ELEVATION_SCALE,
           getPosition: (d) => d.position,
           getElevation: (d) => d.score,
           getFillColor: (d) => scoreToColor(d.score),
@@ -121,6 +132,9 @@ function Map3D() {
             if (modeRef.current !== 'remove' || !info.object) return
             const target = info.object
             setPoints((prev) => prev.filter((p) => p.id !== target.id))
+          },
+          onHover: (info: PickingInfo<WalkabilityPoint>) => {
+            setHoverInfo(info.object ? { x: info.x, y: info.y, score: info.object.score } : null)
           },
           updateTriggers: {
             getFillColor: mode,
@@ -137,6 +151,11 @@ function Map3D() {
         <h1>Walkability Score</h1>
         <p>3D columns — taller & darker red = more walkable</p>
       </div>
+      {hoverInfo && (
+        <div className="tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
+          <StarRating value={hoverInfo.score} size={16} />
+        </div>
+      )}
       <ControlPanel
         mode={mode}
         onModeChange={setMode}

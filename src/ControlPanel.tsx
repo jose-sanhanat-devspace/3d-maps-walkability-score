@@ -1,3 +1,5 @@
+import StarRating from './StarRating'
+
 export type EditMode = 'add' | 'remove'
 
 interface ControlPanelProps {
@@ -32,17 +34,11 @@ function ControlPanel({ mode, onModeChange, score, onScoreChange, pointCount, on
       </div>
 
       {mode === 'add' ? (
-        <label className="score-slider">
-          Score: {score}
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={score}
-            onChange={(e) => onScoreChange(Number(e.target.value))}
-          />
+        <div className="score-picker">
+          <span>Score</span>
+          <StarRating value={score} onChange={onScoreChange} size={22} />
           <span className="hint">Click the map to add a point</span>
-        </label>
+        </div>
       ) : (
         <span className="hint">Click a column on the map to remove it</span>
       )}

@@ -1,7 +1,7 @@
 export interface WalkabilityPoint {
   id: string
   position: [number, number]
-  score: number // 0-100
+  score: number // 1-5 stars
 }
 
 let nextId = 0
@@ -23,7 +23,8 @@ export function generateMockWalkabilityData(
     const lat = center[1] + (Math.random() - 0.5) * spread
     // score biased toward the center to simulate a walkable downtown core
     const distance = Math.hypot(lng - center[0], lat - center[1]) / (spread / 2)
-    const score = Math.max(0, Math.min(100, 90 - distance * 70 + (Math.random() - 0.5) * 30))
+    const raw = Math.max(0, Math.min(1, (90 - distance * 70 + (Math.random() - 0.5) * 30) / 100))
+    const score = Math.max(1, Math.min(5, Math.round(1 + raw * 4)))
     points.push({ id: makePointId(), position: [lng, lat], score })
   }
   return points
