@@ -5,8 +5,11 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { PathLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import type { PickingInfo } from '@deck.gl/core'
 import { generateMockWalkabilityData, makeShapeId, type WalkabilityShape } from './walkabilityData'
+import { createShape, deleteShape, fetchShapes, resetShapes } from './shapesApi'
 import ControlPanel, { type EditMode } from './ControlPanel'
 import StarRating from './StarRating'
+
+const POLL_INTERVAL_MS = 8000
 
 const CITY_CENTER: [number, number] = [100.5231, 13.7367] // Chulalongkorn University, Bangkok, Thailand
 
@@ -64,6 +67,7 @@ function Map3D() {
   const overlayRef = useRef<MapboxOverlay | null>(null)
 
   const [shapes, setShapes] = useState<WalkabilityShape[]>([])
+  const [loaded, setLoaded] = useState(false)
   const [mode, setMode] = useState<EditMode>('add')
   const [appMode, setAppMode] = useState<AppMode>('editor')
   const [score, setScore] = useState(3)
@@ -92,14 +96,40 @@ function Map3D() {
     drawingPathRef.current = drawingPath
   }, [drawingPath])
 
+  // Bumped on every local mutation so a slow/stale fetch (initial load or a
+  // poll tick) can't overwrite a newer local change when it resolves late.
+  const mutationEpochRef = useRef(0)
+
+  const loadShapes = (markLoaded = false) => {
+    const requestEpoch = mutationEpochRef.current
+    fetchShapes()
+      .then((data) => {
+        if (mutationEpochRef.current === requestEpoch) setShapes(data)
+      })
+      .catch((err) => console.error('Failed to load shapes', err))
+      .finally(() => {
+        if (markLoaded) setLoaded(true)
+      })
+  }
+
   const finishLine = () => {
     if (drawingPath && drawingPath.length >= 2) {
-      setShapes((prev) => [...prev, { id: makeShapeId(), path: drawingPath, score: scoreRef.current, closed: false }])
+      const shape: WalkabilityShape = { id: makeShapeId(), path: drawingPath, score: scoreRef.current, closed: false }
+      mutationEpochRef.current += 1
+      setShapes((prev) => [...prev, shape])
+      createShape(shape).catch((err) => console.error('Failed to save shape', err))
     }
     setDrawingPath(null)
   }
 
   const cancelLine = () => setDrawingPath(null)
+
+  // Load shared shapes on mount, then poll so other editors' changes show up.
+  useEffect(() => {
+    loadShapes(true)
+    const interval = setInterval(() => loadShapes(false), POLL_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [])
 
   // Initialize the map once.
   useEffect(() => {
@@ -130,7 +160,10 @@ function Map3D() {
         const startScreen = map.project(prev[0])
         const dist = Math.hypot(startScreen.x - e.point.x, startScreen.y - e.point.y)
         if (dist <= CLOSE_THRESHOLD_PX) {
-          setShapes((s) => [...s, { id: makeShapeId(), path: prev, score: scoreRef.current, closed: true }])
+          const shape: WalkabilityShape = { id: makeShapeId(), path: prev, score: scoreRef.current, closed: true }
+          mutationEpochRef.current += 1
+          setShapes((s) => [...s, shape])
+          createShape(shape).catch((err) => console.error('Failed to save shape', err))
           setDrawingPath(null)
           return
         }
@@ -157,7 +190,9 @@ function Map3D() {
     const handleRemoveClick = (info: PickingInfo<WalkabilityShape>) => {
       if (appModeRef.current !== 'editor' || modeRef.current !== 'remove' || !info.object) return
       const target = info.object
+      mutationEpochRef.current += 1
       setShapes((prev) => prev.filter((s) => s.id !== target.id))
+      deleteShape(target.id).catch((err) => console.error('Failed to delete shape', err))
     }
 
     const handleHover = (info: PickingInfo<WalkabilityShape>) => {
@@ -233,7 +268,7 @@ function Map3D() {
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <div className="legend">
         <h1>Walkability Score</h1>
-        <p>Lines & areas — darker red = more walkable</p>
+        <p>Lines & areas — darker red = more walkable{!loaded && ' (loading shared data…)'}</p>
         <div className="mode-toggle app-mode-toggle">
           <button
             type="button"
@@ -263,7 +298,12 @@ function Map3D() {
           score={score}
           onScoreChange={setScore}
           lineCount={shapes.length}
-          onReset={() => setShapes(generateMockWalkabilityData(CITY_CENTER))}
+          onReset={() => {
+            const mock = generateMockWalkabilityData(CITY_CENTER)
+            mutationEpochRef.current += 1
+            setShapes(mock)
+            resetShapes(mock).catch((err) => console.error('Failed to reset shapes', err))
+          }}
           drawingPointCount={drawingPath?.length ?? 0}
           canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}
           onFinishLine={finishLine}

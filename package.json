@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck:api": "tsc -p tsconfig.api.json"
   },
   "dependencies": {
     "@deck.gl/geo-layers": "^9.3.6",
     "@deck.gl/layers": "^9.3.6",
     "@deck.gl/mapbox": "^9.3.6",
     "@deck.gl/react": "^9.3.6",
+    "@neondatabase/serverless": "^1.1.0",
     "deck.gl": "^9.3.6",
     "maplibre-gl": "^5.24.0",
     "react": "^19.2.7",
@@ -23,6 +25,7 @@
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vercel/node": "^5.8.22",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
