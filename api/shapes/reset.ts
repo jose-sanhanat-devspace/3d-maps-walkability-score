@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getSql } from '../_lib/db'
+import { getSql } from '../_lib/db.js'
 
 interface ShapeInput {
   id: string
