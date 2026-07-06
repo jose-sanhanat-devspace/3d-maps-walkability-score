@@ -159,3 +159,31 @@
 .panel-footer .reset:hover {
   background: #f5f5f5;
 }
+
+@media (max-width: 640px) {
+  .legend {
+    max-width: calc(100% - 32px);
+    padding: 10px 14px;
+  }
+
+  .control-panel {
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-height: 42vh;
+    overflow-y: auto;
+  }
+
+  .mode-toggle button,
+  .draw-actions button,
+  .panel-footer .reset {
+    padding: 10px 8px;
+    font-size: 13px;
+  }
+
+  .star-rating.interactive .star {
+    padding: 6px 4px;
+  }
+}
