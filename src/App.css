@@ -21,3 +21,84 @@
   margin: 0;
   color: #444;
 }
+
+.control-panel {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 14px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-family: system-ui, sans-serif;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.control-panel h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-toggle button {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #f5f5f5;
+  cursor: pointer;
+}
+
+.mode-toggle button.active {
+  background: #cb181d;
+  border-color: #cb181d;
+  color: #fff;
+}
+
+.score-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.score-slider input[type='range'] {
+  width: 100%;
+}
+
+.hint {
+  font-size: 11px;
+  color: #666;
+}
+
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #444;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.panel-footer .reset {
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.panel-footer .reset:hover {
+  background: #f5f5f5;
+}

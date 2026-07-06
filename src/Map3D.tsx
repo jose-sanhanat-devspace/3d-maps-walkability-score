@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { ColumnLayer } from '@deck.gl/layers'
-import { generateMockWalkabilityData, type WalkabilityPoint } from './walkabilityData'
+import type { PickingInfo } from '@deck.gl/core'
+import { generateMockWalkabilityData, makePointId, type WalkabilityPoint } from './walkabilityData'
+import ControlPanel, { type EditMode } from './ControlPanel'
 
 const CITY_CENTER: [number, number] = [100.5231, 13.7367] // Chulalongkorn University, Bangkok, Thailand
 
@@ -21,8 +23,26 @@ function scoreToColor(score: number): [number, number, number, number] {
 function Map3D() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const data = useMemo<WalkabilityPoint[]>(() => generateMockWalkabilityData(CITY_CENTER), [])
+  const overlayRef = useRef<MapboxOverlay | null>(null)
 
+  const [points, setPoints] = useState<WalkabilityPoint[]>(() => generateMockWalkabilityData(CITY_CENTER))
+  const [mode, setMode] = useState<EditMode>('add')
+  const [score, setScore] = useState(70)
+
+  const modeRef = useRef(mode)
+  useEffect(() => {
+    modeRef.current = mode
+    if (mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = mode === 'add' ? 'crosshair' : 'pointer'
+    }
+  }, [mode])
+
+  const scoreRef = useRef(score)
+  useEffect(() => {
+    scoreRef.current = score
+  }, [score])
+
+  // Initialize the map once.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
 
@@ -35,32 +55,55 @@ function Map3D() {
       bearing: -20,
     })
     mapRef.current = map
+    map.getCanvas().style.cursor = 'crosshair'
 
-    const overlay = new MapboxOverlay({
-      interleaved: true,
-      layers: [
-        new ColumnLayer<WalkabilityPoint>({
-          id: 'walkability-columns',
-          data,
-          diskResolution: 6,
-          radius: 25,
-          extruded: true,
-          pickable: true,
-          elevationScale: 3,
-          getPosition: (d) => d.position,
-          getElevation: (d) => d.score,
-          getFillColor: (d) => scoreToColor(d.score),
-        }),
-      ],
-    })
-
+    const overlay = new MapboxOverlay({ interleaved: true, layers: [] })
+    overlayRef.current = overlay
     map.addControl(overlay as unknown as maplibregl.IControl)
+
+    map.on('click', (e) => {
+      if (modeRef.current !== 'add') return
+      const { lng, lat } = e.lngLat
+      setPoints((prev) => [...prev, { id: makePointId(), position: [lng, lat], score: scoreRef.current }])
+    })
 
     return () => {
       map.remove()
       mapRef.current = null
+      overlayRef.current = null
     }
-  }, [data])
+  }, [])
+
+  // Keep the deck.gl layer in sync with the current points/mode.
+  useEffect(() => {
+    if (!overlayRef.current) return
+
+    overlayRef.current.setProps({
+      layers: [
+        new ColumnLayer<WalkabilityPoint>({
+          id: 'walkability-columns',
+          data: points,
+          diskResolution: 6,
+          radius: 25,
+          extruded: true,
+          pickable: true,
+          autoHighlight: mode === 'remove',
+          elevationScale: 3,
+          getPosition: (d) => d.position,
+          getElevation: (d) => d.score,
+          getFillColor: (d) => scoreToColor(d.score),
+          onClick: (info: PickingInfo<WalkabilityPoint>) => {
+            if (modeRef.current !== 'remove' || !info.object) return
+            const target = info.object
+            setPoints((prev) => prev.filter((p) => p.id !== target.id))
+          },
+          updateTriggers: {
+            getFillColor: mode,
+          },
+        }),
+      ],
+    })
+  }, [points, mode])
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
@@ -69,6 +112,14 @@ function Map3D() {
         <h1>Walkability Score</h1>
         <p>3D columns — taller & darker red = more walkable</p>
       </div>
+      <ControlPanel
+        mode={mode}
+        onModeChange={setMode}
+        score={score}
+        onScoreChange={setScore}
+        pointCount={points.length}
+        onReset={() => setPoints(generateMockWalkabilityData(CITY_CENTER))}
+      />
     </div>
   )
 }
