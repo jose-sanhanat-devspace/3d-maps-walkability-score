@@ -20,12 +20,36 @@ function scoreToColor(score: number): [number, number, number, number] {
   return [r, g, b, 200]
 }
 
+// Real building footprints + heights from OSM, served free by OpenFreeMap.
+function addBuildingLayer(map: maplibregl.Map) {
+  map.addSource('building-tiles', {
+    type: 'vector',
+    url: 'https://tiles.openfreemap.org/planet',
+    attribution: '© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors',
+  })
+
+  map.addLayer({
+    id: '3d-buildings',
+    source: 'building-tiles',
+    'source-layer': 'building',
+    type: 'fill-extrusion',
+    minzoom: 13,
+    filter: ['!=', ['get', 'hide_3d'], true],
+    paint: {
+      'fill-extrusion-color': '#c9c9c9',
+      'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 13, 0, 16, ['get', 'render_height']],
+      'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 13, 0, 16, ['get', 'render_min_height']],
+      'fill-extrusion-opacity': 0.85,
+    },
+  })
+}
+
 function Map3D() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const overlayRef = useRef<MapboxOverlay | null>(null)
 
-  const [points, setPoints] = useState<WalkabilityPoint[]>(() => generateMockWalkabilityData(CITY_CENTER))
+  const [points, setPoints] = useState<WalkabilityPoint[]>(() => generateMockWalkabilityData(CITY_CENTER, 400, 0.015))
   const [mode, setMode] = useState<EditMode>('add')
   const [score, setScore] = useState(70)
 
@@ -50,12 +74,13 @@ function Map3D() {
       container: containerRef.current,
       style: MAP_STYLE,
       center: CITY_CENTER,
-      zoom: 14,
+      zoom: 15.5,
       pitch: 50,
       bearing: -20,
     })
     mapRef.current = map
     map.getCanvas().style.cursor = 'crosshair'
+    map.on('load', () => addBuildingLayer(map))
 
     const overlay = new MapboxOverlay({ interleaved: true, layers: [] })
     overlayRef.current = overlay
@@ -118,7 +143,7 @@ function Map3D() {
         score={score}
         onScoreChange={setScore}
         pointCount={points.length}
-        onReset={() => setPoints(generateMockWalkabilityData(CITY_CENTER))}
+        onReset={() => setPoints(generateMockWalkabilityData(CITY_CENTER, 400, 0.015))}
       />
     </div>
   )
