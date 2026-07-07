@@ -100,6 +100,7 @@ function Map3D() {
 
   const [shapes, setShapes] = useState<WalkabilityShape[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [uiHidden, setUiHidden] = useState(false)
   const [mode, setMode] = useState<EditMode>('add')
   const [appMode, setAppMode] = useState<AppMode>('editor')
   const [assetTab, setAssetTab] = useState<AssetTab>('walkability')
@@ -549,85 +550,103 @@ function Map3D() {
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      <div className="legend">
-        <h1>Walkability Score</h1>
-        <p>
-          {appMode === 'editor'
-            ? 'Red = walkability, blue = priority — darker means higher score'
-            : 'Pins only — set a route below to navigate'}
-          {!loaded && ' (loading shared data…)'}
-        </p>
-        <div className="mode-toggle app-mode-toggle">
-          <button
-            type="button"
-            className={appMode === 'editor' ? 'active' : ''}
-            onClick={() => setAppMode('editor')}
-          >
-            Editor
-          </button>
-          <button
-            type="button"
-            className={appMode === 'viewer' ? 'active' : ''}
-            onClick={() => setAppMode('viewer')}
-          >
-            Viewer
-          </button>
-        </div>
-      </div>
-      {hoverInfo && (
-        <div className="tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
-          <StarRating value={hoverInfo.score} size={16} />
-        </div>
-      )}
-      {manholeHoverInfo && (
-        <div className="tooltip tooltip-manhole" style={{ left: manholeHoverInfo.x, top: manholeHoverInfo.y }}>
-          {manholeHoverInfo.imageUrl && <img src={manholeHoverInfo.imageUrl} alt="" />}
-          <p>{manholeHoverInfo.touristSpot || 'No description yet'}</p>
-        </div>
-      )}
-      {appMode === 'editor' ? (
-        <ControlPanel
-          assetTab={assetTab}
-          onAssetTabChange={setAssetTab}
-          mode={mode}
-          onModeChange={setMode}
-          score={score}
-          onScoreChange={setScore}
-          lineCount={activeShapeCount}
-          onReset={() => {
-            const mock = generateMockWalkabilityData(CITY_CENTER, activeShapeCategory)
-            mutationEpochRef.current += 1
-            setShapes((prev) => [...prev.filter((s) => s.category !== activeShapeCategory), ...mock])
-            resetShapes(mock, activeShapeCategory).catch((err) => console.error('Failed to reset shapes', err))
-          }}
-          drawingPointCount={drawingPath?.length ?? 0}
-          canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}
-          onFinishLine={finishLine}
-          onCancelLine={cancelLine}
-          manholeMode={manholeMode}
-          onManholeModeChange={setManholeMode}
-          manholeCount={manholes.length}
-          pendingManhole={pendingManholePos !== null}
-          manholeSaving={manholeSaving}
-          onSaveManhole={saveManhole}
-          onCancelManhole={cancelManhole}
-        />
-      ) : (
-        <NavigationPanel
-          pickingTarget={pickingTarget}
-          onPickingTargetChange={setPickingTarget}
-          routeStart={routeStart}
-          routeEnd={routeEnd}
-          onClear={clearRoute}
-          distanceLabel={routeDistanceLabel}
-          durationLabel={routeDurationLabel}
-          pinCount={manholes.length}
-          showRatingForm={showRatingForm}
-          onFinish={startRating}
-          ratingSaving={ratingSaving}
-          onSubmitRating={submitRating}
-          onCancelRating={cancelRating}
-        />
+      <button type="button" className="ui-toggle" onClick={() => setUiHidden((v) => !v)}>
+        {uiHidden ? 'Show UI' : 'Hide UI'}
+      </button>
+      {!uiHidden && (
+        <>
+          <div className="legend">
+            <h1>Walkability Score</h1>
+            <p>
+              {appMode === 'editor'
+                ? 'Red = walkability, blue = priority — darker means higher score'
+                : 'Pins only — set a route below to navigate'}
+              {!loaded && ' (loading shared data…)'}
+            </p>
+            <div className="mode-toggle app-mode-toggle">
+              <button
+                type="button"
+                className={appMode === 'editor' ? 'active' : ''}
+                onClick={() => setAppMode('editor')}
+              >
+                Editor
+              </button>
+              <button
+                type="button"
+                className={appMode === 'viewer' ? 'active' : ''}
+                onClick={() => setAppMode('viewer')}
+              >
+                Viewer
+              </button>
+            </div>
+          </div>
+          {hoverInfo && (
+            <div className="tooltip" style={{ left: hoverInfo.x, top: hoverInfo.y }}>
+              <StarRating value={hoverInfo.score} size={16} />
+            </div>
+          )}
+          {manholeHoverInfo && (
+            <div className="tooltip tooltip-manhole card" style={{ left: manholeHoverInfo.x, top: manholeHoverInfo.y }}>
+              <div
+                className="header"
+                style={manholeHoverInfo.imageUrl ? { backgroundImage: `url(${manholeHoverInfo.imageUrl})` } : undefined}
+              >
+                {!manholeHoverInfo.imageUrl && '📍'}
+              </div>
+              <div className="info">
+                <p className="title">{manholeHoverInfo.touristSpot || 'No description yet'}</p>
+              </div>
+              <div className="footer">
+                <span className="tag">Art Pin</span>
+                <span className="action">View</span>
+              </div>
+            </div>
+          )}
+          {appMode === 'editor' ? (
+            <ControlPanel
+              assetTab={assetTab}
+              onAssetTabChange={setAssetTab}
+              mode={mode}
+              onModeChange={setMode}
+              score={score}
+              onScoreChange={setScore}
+              lineCount={activeShapeCount}
+              onReset={() => {
+                const mock = generateMockWalkabilityData(CITY_CENTER, activeShapeCategory)
+                mutationEpochRef.current += 1
+                setShapes((prev) => [...prev.filter((s) => s.category !== activeShapeCategory), ...mock])
+                resetShapes(mock, activeShapeCategory).catch((err) => console.error('Failed to reset shapes', err))
+              }}
+              drawingPointCount={drawingPath?.length ?? 0}
+              canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}
+              onFinishLine={finishLine}
+              onCancelLine={cancelLine}
+              manholeMode={manholeMode}
+              onManholeModeChange={setManholeMode}
+              manholeCount={manholes.length}
+              pendingManhole={pendingManholePos !== null}
+              manholeSaving={manholeSaving}
+              onSaveManhole={saveManhole}
+              onCancelManhole={cancelManhole}
+            />
+          ) : (
+            <NavigationPanel
+              pickingTarget={pickingTarget}
+              onPickingTargetChange={setPickingTarget}
+              routeStart={routeStart}
+              routeEnd={routeEnd}
+              onClear={clearRoute}
+              distanceLabel={routeDistanceLabel}
+              durationLabel={routeDurationLabel}
+              pinCount={manholes.length}
+              showRatingForm={showRatingForm}
+              onFinish={startRating}
+              ratingSaving={ratingSaving}
+              onSubmitRating={submitRating}
+              onCancelRating={cancelRating}
+            />
+          )}
+        </>
       )}
     </div>
   )

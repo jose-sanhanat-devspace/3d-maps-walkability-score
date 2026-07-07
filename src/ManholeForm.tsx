@@ -22,11 +22,9 @@ function ManholeForm({ saving, onSave, onCancel }: ManholeFormProps) {
   }, [file])
 
   return (
-    <div className="manhole-form">
-      <h2>New Pin</h2>
-
-      <label className="manhole-form-field">
-        Cover image
+    <div className="card manhole-form">
+      <label className="header" style={previewUrl ? { backgroundImage: `url(${previewUrl})` } : undefined}>
+        {!previewUrl && <span>📷 Add cover photo</span>}
         <input
           type="file"
           accept="image/*"
@@ -34,25 +32,24 @@ function ManholeForm({ saving, onSave, onCancel }: ManholeFormProps) {
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         />
       </label>
-      {previewUrl && <img src={previewUrl} alt="" className="manhole-form-preview" />}
 
-      <label className="manhole-form-field">
-        Nearby tourist spot
+      <div className="info">
+        <p className="title">New Pin</p>
         <textarea
           rows={3}
           disabled={saving}
           value={touristSpot}
           onChange={(e) => setTouristSpot(e.target.value)}
-          placeholder="e.g. 150m from Wat Hua Lamphong"
+          placeholder="Nearby tourist spot, e.g. 150m from Wat Hua Lamphong"
         />
-      </label>
+      </div>
 
-      <div className="draw-actions">
-        <button type="button" disabled={saving} onClick={() => onSave({ file, touristSpot })}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button type="button" disabled={saving} onClick={onCancel}>
+      <div className="footer">
+        <button type="button" className="tag" disabled={saving} onClick={onCancel}>
           Cancel
+        </button>
+        <button type="button" className="action" disabled={saving} onClick={() => onSave({ file, touristSpot })}>
+          {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
     </div>
