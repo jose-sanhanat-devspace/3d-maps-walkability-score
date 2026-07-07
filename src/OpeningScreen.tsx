@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 
 interface OpeningScreenProps {
   onFinish: () => void
@@ -7,21 +7,21 @@ interface OpeningScreenProps {
 function OpeningScreen({ onFinish }: OpeningScreenProps) {
   const [revealed, setRevealed] = useState(false)
   const [fadingOut, setFadingOut] = useState(false)
+  const clickedRef = useRef(false)
 
-  useEffect(() => {
-    const revealTimer = setTimeout(() => setRevealed(true), 500)
-    const fadeTimer = setTimeout(() => setFadingOut(true), 1900)
-    const finishTimer = setTimeout(onFinish, 2500)
-    return () => {
-      clearTimeout(revealTimer)
-      clearTimeout(fadeTimer)
-      clearTimeout(finishTimer)
-    }
-  }, [onFinish])
+  const handleClick = () => {
+    if (clickedRef.current) return
+    clickedRef.current = true
+
+    setRevealed(true)
+    setTimeout(() => setFadingOut(true), 900)
+    setTimeout(onFinish, 1500)
+  }
 
   return (
-    <div className={`opening-screen${fadingOut ? ' fade-out' : ''}`}>
+    <div className={`opening-screen${fadingOut ? ' fade-out' : ''}`} onClick={handleClick}>
       <div className={`opening-card${revealed ? ' revealed' : ''}`}>📍</div>
+      {!revealed && <p className="opening-hint">Click to begin</p>}
     </div>
   )
 }

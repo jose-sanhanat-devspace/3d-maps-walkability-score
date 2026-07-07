@@ -1,22 +1,44 @@
 /* Opening screen — adapted from a Uiverse.io hover-card by eslam-hany:
    corner squares expand to cover the card and reveal text. Here the
-   reveal is auto-triggered on mount instead of on hover, then the
-   whole screen fades out to reveal the map underneath. */
+   reveal is triggered by a click instead of hover, then the whole
+   screen fades out to reveal the map underneath. */
 .opening-screen {
   position: fixed;
   inset: 0;
   z-index: 100;
   display: flex;
+  flex-direction: column;
+  gap: 16px;
   align-items: center;
   justify-content: center;
   background: var(--surface);
   transition: opacity 0.6s ease;
   opacity: 1;
+  cursor: pointer;
 }
 
 .opening-screen.fade-out {
   opacity: 0;
   pointer-events: none;
+}
+
+.opening-hint {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  animation: opening-hint-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes opening-hint-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .opening-card {
