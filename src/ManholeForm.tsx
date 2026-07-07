@@ -23,7 +23,7 @@ function ManholeForm({ saving, onSave, onCancel }: ManholeFormProps) {
 
   return (
     <div className="manhole-form">
-      <h2>New Art Manhole Cover</h2>
+      <h2>New Pin</h2>
 
       <label className="manhole-form-field">
         Cover image

@@ -11,7 +11,9 @@ import { makeManholeId, type ManholeCover } from './manholeData'
 import { createManhole, deleteManhole, fetchManholes, uploadManholeImage } from './manholeApi'
 import { pinHeadMesh, pinHeadTranslation, pinStemMesh, PIN_STEM_TRANSLATION } from './pinMesh'
 import ControlPanel, { type AssetTab, type EditMode } from './ControlPanel'
+import NavigationPanel, { type PickingTarget } from './NavigationPanel'
 import StarRating from './StarRating'
+import { estimateWalkSeconds, formatDistance, formatDuration, haversineDistanceMeters } from './routeUtils'
 
 const POLL_INTERVAL_MS = 8000
 
@@ -24,6 +26,9 @@ const CLOSE_COLOR: [number, number, number, number] = [46, 204, 113, 255]
 const CLOSE_THRESHOLD_PX = 14
 const MIN_CLOSE_POINTS = 3
 const MANHOLE_COLOR: [number, number, number, number] = [184, 134, 11, 255]
+const ROUTE_COLOR: [number, number, number, number] = [0, 122, 255, 220]
+const ROUTE_START_COLOR: [number, number, number, number] = [16, 185, 129, 255]
+const ROUTE_END_COLOR: [number, number, number, number] = [239, 68, 68, 255]
 
 function scoreToColor(score: number, alpha = 220): [number, number, number, number] {
   // 1 star -> pale yellow, 5 stars -> deep red
@@ -93,28 +98,43 @@ function Map3D() {
   const [manholeSaving, setManholeSaving] = useState(false)
   const [manholeHoverInfo, setManholeHoverInfo] = useState<ManholeHoverInfo | null>(null)
 
+  const [pickingTarget, setPickingTarget] = useState<PickingTarget>(null)
+  const [routeStart, setRouteStart] = useState<ManholeCover | null>(null)
+  const [routeEnd, setRouteEnd] = useState<ManholeCover | null>(null)
+
   const modeRef = useRef(mode)
   const appModeRef = useRef(appMode)
   const assetTabRef = useRef(assetTab)
   const manholeModeRef = useRef(manholeMode)
+  const pickingTargetRef = useRef(pickingTarget)
   useEffect(() => {
     modeRef.current = mode
     appModeRef.current = appMode
     assetTabRef.current = assetTab
     manholeModeRef.current = manholeMode
+    pickingTargetRef.current = pickingTarget
 
     if (mapRef.current) {
       let cursor = ''
       if (appMode === 'editor') {
         const activeMode = assetTab === 'walkability' ? mode : manholeMode
         cursor = activeMode === 'add' ? 'crosshair' : 'pointer'
+      } else if (pickingTarget) {
+        cursor = 'crosshair'
       }
       mapRef.current.getCanvas().style.cursor = cursor
     }
 
     if (appMode !== 'editor' || assetTab !== 'walkability' || mode !== 'add') setDrawingPath(null)
     if (appMode !== 'editor' || assetTab !== 'manhole' || manholeMode !== 'add') setPendingManholePos(null)
-  }, [mode, appMode, assetTab, manholeMode])
+    if (appMode !== 'viewer') setPickingTarget(null)
+  }, [mode, appMode, assetTab, manholeMode, pickingTarget])
+
+  // If a pin used in the current route gets deleted, drop the stale reference.
+  useEffect(() => {
+    if (routeStart && !manholes.some((m) => m.id === routeStart.id)) setRouteStart(null)
+    if (routeEnd && !manholes.some((m) => m.id === routeEnd.id)) setRouteEnd(null)
+  }, [manholes, routeStart, routeEnd])
 
   const scoreRef = useRef(score)
   useEffect(() => {
@@ -188,6 +208,20 @@ function Map3D() {
   }
 
   const cancelManhole = () => setPendingManholePos(null)
+
+  const clearRoute = () => {
+    setRouteStart(null)
+    setRouteEnd(null)
+    setPickingTarget(null)
+  }
+
+  const routeDistanceMeters =
+    routeStart && routeEnd
+      ? haversineDistanceMeters([routeStart.lng, routeStart.lat], [routeEnd.lng, routeEnd.lat])
+      : null
+  const routeDistanceLabel = routeDistanceMeters !== null ? formatDistance(routeDistanceMeters) : null
+  const routeDurationLabel =
+    routeDistanceMeters !== null ? formatDuration(estimateWalkSeconds(routeDistanceMeters)) : null
 
   // Load shared data on mount, then poll so other editors' changes show up.
   useEffect(() => {
@@ -282,18 +316,25 @@ function Map3D() {
       setHoverInfo(info.object ? { x: info.x, y: info.y, score: info.object.score } : null)
     }
 
-    const handleManholeRemoveClick = (info: PickingInfo<ManholeCover>) => {
-      if (
-        appModeRef.current !== 'editor' ||
-        assetTabRef.current !== 'manhole' ||
-        manholeModeRef.current !== 'remove' ||
-        !info.object
-      )
-        return
+    const handleManholeClick = (info: PickingInfo<ManholeCover>) => {
+      if (!info.object) return
       const target = info.object
-      manholeEpochRef.current += 1
-      setManholes((prev) => prev.filter((m) => m.id !== target.id))
-      deleteManhole(target.id).catch((err) => console.error('Failed to delete manhole', err))
+
+      if (appModeRef.current === 'editor') {
+        if (assetTabRef.current !== 'manhole' || manholeModeRef.current !== 'remove') return
+        manholeEpochRef.current += 1
+        setManholes((prev) => prev.filter((m) => m.id !== target.id))
+        deleteManhole(target.id).catch((err) => console.error('Failed to delete manhole', err))
+        return
+      }
+
+      if (pickingTargetRef.current === 'start') {
+        setRouteStart(target)
+        setPickingTarget(null)
+      } else if (pickingTargetRef.current === 'end') {
+        setRouteEnd(target)
+        setPickingTarget(null)
+      }
     }
 
     const handleManholeHover = (info: PickingInfo<ManholeCover>) => {
@@ -372,7 +413,7 @@ function Map3D() {
           pickable: true,
           autoHighlight: true,
           highlightColor: [255, 255, 255, 120],
-          onClick: handleManholeRemoveClick,
+          onClick: handleManholeClick,
           onHover: handleManholeHover,
         }),
         new SimpleMeshLayer<ManholeCover>({
@@ -385,7 +426,7 @@ function Map3D() {
           pickable: true,
           autoHighlight: true,
           highlightColor: [255, 255, 255, 120],
-          onClick: handleManholeRemoveClick,
+          onClick: handleManholeClick,
           onHover: handleManholeHover,
         }),
         new ScatterplotLayer<[number, number]>({
@@ -396,9 +437,39 @@ function Map3D() {
           getRadius: 8,
           getFillColor: DRAFT_COLOR,
         }),
+        new PathLayer<{ path: [number, number][] }>({
+          id: 'route-line',
+          data:
+            routeStart && routeEnd
+              ? [
+                  {
+                    path: [
+                      [routeStart.lng, routeStart.lat],
+                      [routeEnd.lng, routeEnd.lat],
+                    ],
+                  },
+                ]
+              : [],
+          widthUnits: 'pixels',
+          widthMinPixels: 4,
+          getPath: (d) => d.path,
+          getWidth: 4,
+          getColor: ROUTE_COLOR,
+        }),
+        new ScatterplotLayer<{ position: [number, number]; color: [number, number, number, number] }>({
+          id: 'route-endpoints',
+          data: [
+            ...(routeStart ? [{ position: [routeStart.lng, routeStart.lat] as [number, number], color: ROUTE_START_COLOR }] : []),
+            ...(routeEnd ? [{ position: [routeEnd.lng, routeEnd.lat] as [number, number], color: ROUTE_END_COLOR }] : []),
+          ],
+          getPosition: (d) => d.position,
+          radiusUnits: 'pixels',
+          getRadius: 8,
+          getFillColor: (d) => d.color,
+        }),
       ],
     })
-  }, [shapes, mode, drawingPath, manholes, pendingManholePos])
+  }, [shapes, mode, drawingPath, manholes, pendingManholePos, routeStart, routeEnd])
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
@@ -434,7 +505,7 @@ function Map3D() {
           <p>{manholeHoverInfo.touristSpot || 'No description yet'}</p>
         </div>
       )}
-      {appMode === 'editor' && (
+      {appMode === 'editor' ? (
         <ControlPanel
           assetTab={assetTab}
           onAssetTabChange={setAssetTab}
@@ -460,6 +531,17 @@ function Map3D() {
           manholeSaving={manholeSaving}
           onSaveManhole={saveManhole}
           onCancelManhole={cancelManhole}
+        />
+      ) : (
+        <NavigationPanel
+          pickingTarget={pickingTarget}
+          onPickingTargetChange={setPickingTarget}
+          routeStart={routeStart}
+          routeEnd={routeEnd}
+          onClear={clearRoute}
+          distanceLabel={routeDistanceLabel}
+          durationLabel={routeDurationLabel}
+          pinCount={manholes.length}
         />
       )}
     </div>

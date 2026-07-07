@@ -320,6 +320,76 @@
   color: var(--text-primary);
 }
 
+.nav-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nav-row-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nav-pin-label {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.nav-row-content button {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.nav-row-content button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.nav-row-content button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.nav-result {
+  display: flex;
+  gap: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.nav-result > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-result strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.nav-clear {
+  align-self: flex-start;
+}
+
 @media (max-width: 640px) {
   .legend {
     max-width: calc(100% - 32px);

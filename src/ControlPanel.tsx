@@ -66,7 +66,7 @@ function ControlPanel({
           className={assetTab === 'manhole' ? 'active' : ''}
           onClick={() => onAssetTabChange('manhole')}
         >
-          Manholes
+          Pin
         </button>
       </div>
 
@@ -129,24 +129,24 @@ function ControlPanel({
               className={manholeMode === 'add' ? 'active' : ''}
               onClick={() => onManholeModeChange('add')}
             >
-              Add manhole
+              Add pin
             </button>
             <button
               type="button"
               className={manholeMode === 'remove' ? 'active' : ''}
               onClick={() => onManholeModeChange('remove')}
             >
-              Remove manhole
+              Remove pin
             </button>
           </div>
           <span className="hint">
             {manholeMode === 'add'
-              ? 'Click the map to place an art manhole cover pin'
+              ? 'Click the map to place a pin'
               : 'Click a pin on the map to remove it'}
           </span>
 
           <div className="panel-footer">
-            <span>{manholeCount} manholes</span>
+            <span>{manholeCount} pins</span>
           </div>
         </>
       )}
