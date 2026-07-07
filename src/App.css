@@ -487,6 +487,24 @@
   align-self: flex-start;
 }
 
+.rating-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rating-form h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.rating-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
 @media (max-width: 640px) {
   .legend {
     max-width: calc(100% - 32px);

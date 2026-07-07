@@ -1,4 +1,6 @@
 import type { ManholeCover } from './manholeData'
+import type { PavementRatingInput } from './ratingData'
+import RatingForm from './RatingForm'
 
 export type PickingTarget = 'start' | 'end' | null
 
@@ -11,6 +13,11 @@ interface NavigationPanelProps {
   distanceLabel: string | null
   durationLabel: string | null
   pinCount: number
+  showRatingForm: boolean
+  onFinish: () => void
+  ratingSaving: boolean
+  onSubmitRating: (data: PavementRatingInput) => void
+  onCancelRating: () => void
 }
 
 function pinLabel(pin: ManholeCover | null): string {
@@ -27,9 +34,16 @@ function NavigationPanel({
   distanceLabel,
   durationLabel,
   pinCount,
+  showRatingForm,
+  onFinish,
+  ratingSaving,
+  onSubmitRating,
+  onCancelRating,
 }: NavigationPanelProps) {
   const togglePicking = (target: 'start' | 'end') =>
     onPickingTargetChange(pickingTarget === target ? null : target)
+
+  const routeReady = Boolean(distanceLabel && durationLabel)
 
   return (
     <div className="control-panel nav-panel">
@@ -37,6 +51,8 @@ function NavigationPanel({
 
       {pinCount === 0 ? (
         <span className="hint">No pins on the map yet — switch to Editor to add some.</span>
+      ) : showRatingForm ? (
+        <RatingForm saving={ratingSaving} onSubmit={onSubmitRating} onCancel={onCancelRating} />
       ) : (
         <>
           <div className="nav-row">
@@ -67,25 +83,36 @@ function NavigationPanel({
             </div>
           </div>
 
-          {distanceLabel && durationLabel ? (
-            <div className="nav-result">
-              <div>
-                <span className="field-label">Distance</span>
-                <strong>{distanceLabel}</strong>
+          {routeReady ? (
+            <>
+              <div className="nav-result">
+                <div>
+                  <span className="field-label">Distance</span>
+                  <strong>{distanceLabel}</strong>
+                </div>
+                <div>
+                  <span className="field-label">Est. walk time</span>
+                  <strong>{durationLabel}</strong>
+                </div>
               </div>
-              <div>
-                <span className="field-label">Est. walk time</span>
-                <strong>{durationLabel}</strong>
+              <div className="draw-actions">
+                <button type="button" onClick={onFinish}>
+                  Finish
+                </button>
+                <button type="button" onClick={onClear}>
+                  Clear route
+                </button>
               </div>
-            </div>
+            </>
           ) : (
-            <span className="hint">Set both a start and end pin to estimate distance & time</span>
-          )}
-
-          {(routeStart || routeEnd) && (
-            <button type="button" className="reset nav-clear" onClick={onClear}>
-              Clear route
-            </button>
+            <>
+              <span className="hint">Set both a start and end pin to estimate distance & time</span>
+              {(routeStart || routeEnd) && (
+                <button type="button" className="reset nav-clear" onClick={onClear}>
+                  Clear route
+                </button>
+              )}
+            </>
           )}
         </>
       )}

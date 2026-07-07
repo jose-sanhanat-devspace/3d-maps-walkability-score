@@ -14,6 +14,8 @@ import ControlPanel, { type AssetTab, type EditMode } from './ControlPanel'
 import NavigationPanel, { type PickingTarget } from './NavigationPanel'
 import StarRating from './StarRating'
 import { estimateWalkSeconds, formatDistance, formatDuration, haversineDistanceMeters } from './routeUtils'
+import { makeRatingId, type PavementRatingInput } from './ratingData'
+import { createRating } from './ratingApi'
 
 const POLL_INTERVAL_MS = 8000
 
@@ -114,6 +116,8 @@ function Map3D() {
   const [pickingTarget, setPickingTarget] = useState<PickingTarget>(null)
   const [routeStart, setRouteStart] = useState<ManholeCover | null>(null)
   const [routeEnd, setRouteEnd] = useState<ManholeCover | null>(null)
+  const [showRatingForm, setShowRatingForm] = useState(false)
+  const [ratingSaving, setRatingSaving] = useState(false)
 
   const modeRef = useRef(mode)
   const appModeRef = useRef(appMode)
@@ -140,13 +144,22 @@ function Map3D() {
 
     if (appMode !== 'editor' || assetTab === 'manhole' || mode !== 'add') setDrawingPath(null)
     if (appMode !== 'editor' || assetTab !== 'manhole' || manholeMode !== 'add') setPendingManholePos(null)
-    if (appMode !== 'viewer') setPickingTarget(null)
+    if (appMode !== 'viewer') {
+      setPickingTarget(null)
+      setShowRatingForm(false)
+    }
   }, [mode, appMode, assetTab, manholeMode, pickingTarget])
 
   // If a pin used in the current route gets deleted, drop the stale reference.
   useEffect(() => {
-    if (routeStart && !manholes.some((m) => m.id === routeStart.id)) setRouteStart(null)
-    if (routeEnd && !manholes.some((m) => m.id === routeEnd.id)) setRouteEnd(null)
+    if (routeStart && !manholes.some((m) => m.id === routeStart.id)) {
+      setRouteStart(null)
+      setShowRatingForm(false)
+    }
+    if (routeEnd && !manholes.some((m) => m.id === routeEnd.id)) {
+      setRouteEnd(null)
+      setShowRatingForm(false)
+    }
   }, [manholes, routeStart, routeEnd])
 
   const scoreRef = useRef(score)
@@ -233,6 +246,33 @@ function Map3D() {
     setRouteStart(null)
     setRouteEnd(null)
     setPickingTarget(null)
+    setShowRatingForm(false)
+  }
+
+  const startRating = () => setShowRatingForm(true)
+  const cancelRating = () => setShowRatingForm(false)
+
+  const submitRating = async (data: PavementRatingInput) => {
+    if (!routeStart || !routeEnd) return
+    setRatingSaving(true)
+    try {
+      await createRating({
+        id: makeRatingId(),
+        startPinId: routeStart.id,
+        startLng: routeStart.lng,
+        startLat: routeStart.lat,
+        endPinId: routeEnd.id,
+        endLng: routeEnd.lng,
+        endLat: routeEnd.lat,
+        distanceMeters: routeDistanceMeters ?? 0,
+        ...data,
+      })
+    } catch (err) {
+      console.error('Failed to save pavement rating', err)
+    } finally {
+      setRatingSaving(false)
+      clearRoute()
+    }
   }
 
   const routeDistanceMeters =
@@ -326,8 +366,9 @@ function Map3D() {
 
     const activeCategory: ShapeCategory | null =
       assetTab === 'priority' ? 'priority' : assetTab === 'walkability' ? 'walkability' : null
-    // In editor mode only the active tab's dataset is visible; viewer mode shows everything.
-    const visibleShapes = appMode === 'editor' ? shapes.filter((s) => s.category === activeCategory) : shapes
+    // In editor mode only the active tab's dataset is visible; viewer mode
+    // hides all walkability/priority highlights and shows only pins.
+    const visibleShapes = appMode === 'editor' ? shapes.filter((s) => s.category === activeCategory) : []
     const lines = visibleShapes.filter((s) => !s.closed)
     const areas = visibleShapes.filter((s) => s.closed)
     const canClose = (drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS
@@ -511,7 +552,9 @@ function Map3D() {
       <div className="legend">
         <h1>Walkability Score</h1>
         <p>
-          Red = walkability, blue = priority — darker means higher score
+          {appMode === 'editor'
+            ? 'Red = walkability, blue = priority — darker means higher score'
+            : 'Pins only — set a route below to navigate'}
           {!loaded && ' (loading shared data…)'}
         </p>
         <div className="mode-toggle app-mode-toggle">
@@ -579,6 +622,11 @@ function Map3D() {
           distanceLabel={routeDistanceLabel}
           durationLabel={routeDurationLabel}
           pinCount={manholes.length}
+          showRatingForm={showRatingForm}
+          onFinish={startRating}
+          ratingSaving={ratingSaving}
+          onSubmitRating={submitRating}
+          onCancelRating={cancelRating}
         />
       )}
     </div>
