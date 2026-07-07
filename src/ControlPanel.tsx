@@ -2,7 +2,7 @@ import StarRating from './StarRating'
 import ManholeForm from './ManholeForm'
 
 export type EditMode = 'add' | 'remove'
-export type AssetTab = 'walkability' | 'manhole'
+export type AssetTab = 'walkability' | 'priority' | 'manhole'
 
 interface ControlPanelProps {
   assetTab: AssetTab
@@ -63,6 +63,13 @@ function ControlPanel({
         </button>
         <button
           type="button"
+          className={assetTab === 'priority' ? 'active' : ''}
+          onClick={() => onAssetTabChange('priority')}
+        >
+          Priority
+        </button>
+        <button
+          type="button"
           className={assetTab === 'manhole' ? 'active' : ''}
           onClick={() => onAssetTabChange('manhole')}
         >
@@ -70,7 +77,7 @@ function ControlPanel({
         </button>
       </div>
 
-      {assetTab === 'walkability' ? (
+      {assetTab !== 'manhole' ? (
         <>
           <div className="mode-toggle">
             <button type="button" className={mode === 'add' ? 'active' : ''} onClick={() => onModeChange('add')}>

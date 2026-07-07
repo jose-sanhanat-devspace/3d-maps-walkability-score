@@ -1,8 +1,11 @@
+export type ShapeCategory = 'walkability' | 'priority'
+
 export interface WalkabilityShape {
   id: string
   path: [number, number][] // vertices; if closed, this is the polygon ring (not repeating the first point)
   score: number // 1-5 stars
   closed: boolean // false = line segment, true = filled area
+  category: ShapeCategory
 }
 
 let nextId = 0
@@ -12,7 +15,7 @@ export function makeShapeId(): string {
 }
 
 function scoreNear(center: [number, number], lng: number, lat: number, spread: number): number {
-  // score biased toward the center to simulate a walkable downtown core
+  // score biased toward the center to simulate a walkable/priority downtown core
   const distance = Math.hypot(lng - center[0], lat - center[1]) / (spread / 2)
   const raw = Math.max(0, Math.min(1, (90 - distance * 70 + (Math.random() - 0.5) * 30) / 100))
   return Math.max(1, Math.min(5, Math.round(1 + raw * 4)))
@@ -30,11 +33,12 @@ function randomPolygon(cx: number, cy: number): [number, number][] {
   return path
 }
 
-// Mock walkability scores around a city center: a mix of street-like line
-// segments and small area blocks. Swap this out for real data (e.g. computed
-// from OSM sidewalk/amenity density).
+// Mock scores around a city center: a mix of street-like line segments and
+// small area blocks. Swap this out for real data (e.g. computed from OSM
+// sidewalk/amenity density for walkability, or planning priority data).
 export function generateMockWalkabilityData(
   center: [number, number],
+  category: ShapeCategory,
   count = 150,
   spread = 0.015,
   areaChance = 0.25,
@@ -46,7 +50,7 @@ export function generateMockWalkabilityData(
     const score = scoreNear(center, lng, lat, spread)
 
     if (Math.random() < areaChance) {
-      shapes.push({ id: makeShapeId(), path: randomPolygon(lng, lat), score, closed: true })
+      shapes.push({ id: makeShapeId(), path: randomPolygon(lng, lat), score, closed: true, category })
     } else {
       const angle = Math.random() * Math.PI * 2
       const segmentLength = 0.0006 + Math.random() * 0.0009
@@ -60,6 +64,7 @@ export function generateMockWalkabilityData(
         ],
         score,
         closed: false,
+        category,
       })
     }
   }

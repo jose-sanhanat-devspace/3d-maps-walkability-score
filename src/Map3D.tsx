@@ -5,7 +5,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { PathLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import type { PickingInfo } from '@deck.gl/core'
-import { generateMockWalkabilityData, makeShapeId, type WalkabilityShape } from './walkabilityData'
+import { generateMockWalkabilityData, makeShapeId, type ShapeCategory, type WalkabilityShape } from './walkabilityData'
 import { createShape, deleteShape, fetchShapes, resetShapes } from './shapesApi'
 import { makeManholeId, type ManholeCover } from './manholeData'
 import { createManhole, deleteManhole, fetchManholes, uploadManholeImage } from './manholeApi'
@@ -30,13 +30,26 @@ const ROUTE_COLOR: [number, number, number, number] = [0, 122, 255, 220]
 const ROUTE_START_COLOR: [number, number, number, number] = [16, 185, 129, 255]
 const ROUTE_END_COLOR: [number, number, number, number] = [239, 68, 68, 255]
 
-function scoreToColor(score: number, alpha = 220): [number, number, number, number] {
+function walkabilityColor(score: number, alpha = 220): [number, number, number, number] {
   // 1 star -> pale yellow, 5 stars -> deep red
   const t = Math.max(0, Math.min(1, (score - 1) / 4))
   const r = 255
   const g = Math.round(245 - t * 165)
   const b = Math.round(235 - t * 200)
   return [r, g, b, alpha]
+}
+
+function priorityColor(score: number, alpha = 220): [number, number, number, number] {
+  // 1 star -> pale blue, 5 stars -> deep indigo
+  const t = Math.max(0, Math.min(1, (score - 1) / 4))
+  const r = Math.round(224 - t * 160)
+  const g = Math.round(236 - t * 170)
+  const b = 255
+  return [r, g, b, alpha]
+}
+
+function shapeColor(shape: WalkabilityShape, alpha = 220): [number, number, number, number] {
+  return shape.category === 'priority' ? priorityColor(shape.score, alpha) : walkabilityColor(shape.score, alpha)
 }
 
 interface HoverInfo {
@@ -117,7 +130,7 @@ function Map3D() {
     if (mapRef.current) {
       let cursor = ''
       if (appMode === 'editor') {
-        const activeMode = assetTab === 'walkability' ? mode : manholeMode
+        const activeMode = assetTab === 'manhole' ? manholeMode : mode
         cursor = activeMode === 'add' ? 'crosshair' : 'pointer'
       } else if (pickingTarget) {
         cursor = 'crosshair'
@@ -125,7 +138,7 @@ function Map3D() {
       mapRef.current.getCanvas().style.cursor = cursor
     }
 
-    if (appMode !== 'editor' || assetTab !== 'walkability' || mode !== 'add') setDrawingPath(null)
+    if (appMode !== 'editor' || assetTab === 'manhole' || mode !== 'add') setDrawingPath(null)
     if (appMode !== 'editor' || assetTab !== 'manhole' || manholeMode !== 'add') setPendingManholePos(null)
     if (appMode !== 'viewer') setPickingTarget(null)
   }, [mode, appMode, assetTab, manholeMode, pickingTarget])
@@ -174,7 +187,14 @@ function Map3D() {
 
   const finishLine = () => {
     if (drawingPath && drawingPath.length >= 2) {
-      const shape: WalkabilityShape = { id: makeShapeId(), path: drawingPath, score: scoreRef.current, closed: false }
+      const category: ShapeCategory = assetTab === 'priority' ? 'priority' : 'walkability'
+      const shape: WalkabilityShape = {
+        id: makeShapeId(),
+        path: drawingPath,
+        score: scoreRef.current,
+        closed: false,
+        category,
+      }
       mutationEpochRef.current += 1
       setShapes((prev) => [...prev, shape])
       createShape(shape).catch((err) => console.error('Failed to save shape', err))
@@ -222,6 +242,9 @@ function Map3D() {
   const routeDistanceLabel = routeDistanceMeters !== null ? formatDistance(routeDistanceMeters) : null
   const routeDurationLabel =
     routeDistanceMeters !== null ? formatDuration(estimateWalkSeconds(routeDistanceMeters)) : null
+
+  const activeShapeCategory: ShapeCategory = assetTab === 'priority' ? 'priority' : 'walkability'
+  const activeShapeCount = shapes.filter((s) => s.category === activeShapeCategory).length
 
   // Load shared data on mount, then poll so other editors' changes show up.
   useEffect(() => {
@@ -271,7 +294,14 @@ function Map3D() {
         const startScreen = map.project(prev[0])
         const dist = Math.hypot(startScreen.x - e.point.x, startScreen.y - e.point.y)
         if (dist <= CLOSE_THRESHOLD_PX) {
-          const shape: WalkabilityShape = { id: makeShapeId(), path: prev, score: scoreRef.current, closed: true }
+          const category: ShapeCategory = assetTabRef.current === 'priority' ? 'priority' : 'walkability'
+          const shape: WalkabilityShape = {
+            id: makeShapeId(),
+            path: prev,
+            score: scoreRef.current,
+            closed: true,
+            category,
+          }
           mutationEpochRef.current += 1
           setShapes((s) => [...s, shape])
           createShape(shape).catch((err) => console.error('Failed to save shape', err))
@@ -294,14 +324,18 @@ function Map3D() {
   useEffect(() => {
     if (!overlayRef.current) return
 
-    const lines = shapes.filter((s) => !s.closed)
-    const areas = shapes.filter((s) => s.closed)
+    const activeCategory: ShapeCategory | null =
+      assetTab === 'priority' ? 'priority' : assetTab === 'walkability' ? 'walkability' : null
+    // In editor mode only the active tab's dataset is visible; viewer mode shows everything.
+    const visibleShapes = appMode === 'editor' ? shapes.filter((s) => s.category === activeCategory) : shapes
+    const lines = visibleShapes.filter((s) => !s.closed)
+    const areas = visibleShapes.filter((s) => s.closed)
     const canClose = (drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS
 
     const handleRemoveClick = (info: PickingInfo<WalkabilityShape>) => {
       if (
         appModeRef.current !== 'editor' ||
-        assetTabRef.current !== 'walkability' ||
+        assetTabRef.current === 'manhole' ||
         modeRef.current !== 'remove' ||
         !info.object
       )
@@ -355,8 +389,8 @@ function Map3D() {
           filled: true,
           lineWidthUnits: 'pixels',
           getPolygon: (d) => d.path,
-          getFillColor: (d) => scoreToColor(d.score, 110),
-          getLineColor: (d) => scoreToColor(d.score),
+          getFillColor: (d) => shapeColor(d, 110),
+          getLineColor: (d) => shapeColor(d),
           getLineWidth: (d) => 2 + d.score * 2,
           onClick: handleRemoveClick,
           onHover: handleHover,
@@ -375,7 +409,7 @@ function Map3D() {
           widthMinPixels: 3,
           getPath: (d) => d.path,
           getWidth: (d) => 2 + d.score * 2,
-          getColor: (d) => scoreToColor(d.score),
+          getColor: (d) => shapeColor(d),
           onClick: handleRemoveClick,
           onHover: handleHover,
           updateTriggers: {
@@ -469,14 +503,17 @@ function Map3D() {
         }),
       ],
     })
-  }, [shapes, mode, drawingPath, manholes, pendingManholePos, routeStart, routeEnd])
+  }, [shapes, mode, assetTab, appMode, drawingPath, manholes, pendingManholePos, routeStart, routeEnd])
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <div className="legend">
         <h1>Walkability Score</h1>
-        <p>Lines & areas — darker red = more walkable{!loaded && ' (loading shared data…)'}</p>
+        <p>
+          Red = walkability, blue = priority — darker means higher score
+          {!loaded && ' (loading shared data…)'}
+        </p>
         <div className="mode-toggle app-mode-toggle">
           <button
             type="button"
@@ -513,12 +550,12 @@ function Map3D() {
           onModeChange={setMode}
           score={score}
           onScoreChange={setScore}
-          lineCount={shapes.length}
+          lineCount={activeShapeCount}
           onReset={() => {
-            const mock = generateMockWalkabilityData(CITY_CENTER)
+            const mock = generateMockWalkabilityData(CITY_CENTER, activeShapeCategory)
             mutationEpochRef.current += 1
-            setShapes(mock)
-            resetShapes(mock).catch((err) => console.error('Failed to reset shapes', err))
+            setShapes((prev) => [...prev.filter((s) => s.category !== activeShapeCategory), ...mock])
+            resetShapes(mock, activeShapeCategory).catch((err) => console.error('Failed to reset shapes', err))
           }}
           drawingPointCount={drawingPath?.length ?? 0}
           canClose={(drawingPath?.length ?? 0) >= MIN_CLOSE_POINTS}

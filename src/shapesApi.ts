@@ -1,4 +1,4 @@
-import type { WalkabilityShape } from './walkabilityData'
+import type { ShapeCategory, WalkabilityShape } from './walkabilityData'
 
 export async function fetchShapes(): Promise<WalkabilityShape[]> {
   const res = await fetch('/api/shapes')
@@ -20,11 +20,11 @@ export async function deleteShape(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Failed to delete shape: ${res.status}`)
 }
 
-export async function resetShapes(shapes: WalkabilityShape[]): Promise<void> {
+export async function resetShapes(shapes: WalkabilityShape[], category: ShapeCategory): Promise<void> {
   const res = await fetch('/api/shapes/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shapes }),
+    body: JSON.stringify({ shapes, category }),
   })
   if (!res.ok) throw new Error(`Failed to reset shapes: ${res.status}`)
 }
